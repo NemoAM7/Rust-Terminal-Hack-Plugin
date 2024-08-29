@@ -95,5 +95,9 @@
     <Reference Include="System.Runtime.Serialization" />
     <Reference Include="System.Transactions" />
   </ItemGroup>
+  <ItemGroup />
+  <ItemGroup>
+    <Content Include="Assets\finalscan.png" />
+  </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

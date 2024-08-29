@@ -1,7 +1,9 @@
-﻿using Oxide.Game.Rust.Cui;
+﻿using Oxide.Core.Plugins;
+using Oxide.Game.Rust.Cui;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Policy;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -13,9 +15,32 @@ namespace Oxide.Plugins
     [Info("Terminal Hack Plugin", "Mooli", "1.0.0")]
     public class TerminalHackPlugin : RustPlugin
     {
-        static int numberOfLines = 14;
-        string[] terminalUsedCommands = new string[numberOfLines];
-        string terminalPath = @"C:\User\Brinda>";
+        [PluginReference]
+        private Plugin ImageLibrary;
+
+        private static int numberOfLines = 14;
+        private string[] terminalUsedCommands = new string[numberOfLines];
+        private string terminalPath = @"C:\User\Brinda>";
+
+        private const string imagePath = "https://cdn.discordapp.com/attachments/1268169780024840202/1278667833131270255/Group_3_1.png";
+
+        void Init()
+        {
+            if (ImageLibrary == null)
+            {
+                PrintError("ImageLibrary plugin is not loaded. Please install ImageLibrary plugin.");
+                return;
+            }
+
+            ImageLibrary.AddImage(imagePath, "scannerUi");
+        }
+
+
+        //helpers
+        private void clearLastCommands()
+        {
+            terminalUsedCommands = new string[numberOfLines];
+        }
 
         private void updateLastCommand(string cmd)
         {
@@ -33,8 +58,12 @@ namespace Oxide.Plugins
                     updateLastCommand("hack.exe");
                     break;
 
-                case "run hack.exe":
+                case "run":
                     ConsoleSystem.Run(ConsoleSystem.Option.Server.Quiet(), "scanner.open");
+                    break;
+
+                case "clear":
+                    clearLastCommands();
                     break;
 
                 default:
@@ -43,16 +72,35 @@ namespace Oxide.Plugins
             }
         }
 
+        //UI helpers
         private void CreateScannerUI(BasePlayer player)
         {
+            Puts("Created Scanner");
             var uiElements = new CuiElementContainer();
+            string imageId = ImageLibrary.GetImage("scannerUi");
+
+            var mainPanel = uiElements.Add(new CuiPanel
+            {
+                Image = { Color = "0 0 0 0" },
+                RectTransform = { AnchorMin = "0.3178574 0.3257154", AnchorMax = "0.6714277 0.7152363" },
+                CursorEnabled = true
+            }, "Overlay", "ScannerPlan");
+
+            uiElements.Add(new CuiButton
+            {
+                Button = { Close = mainPanel, Color = "0 0 0 0" },
+                Text = { Text = "X", FontSize = 14 },
+                RectTransform = { AnchorMin = "0.915827 0.9022043", AnchorMax = "0.9798004 0.9798004" }
+
+            }, mainPanel);
+
             uiElements.Add(new CuiElement
             {
                 Name = "Scanner",
-                Parent = "Overlay",
+                Parent = mainPanel,
                 Components =
                 {
-                    new CuiRawImageComponent { Url = "https://s4.aconvert.com/convert/p3r68-cdx67/a3ba5-a14jd.png" },
+                    new CuiRawImageComponent { Png = imageId, Sprite = "assets/content/ui/uibackgroundblur.mat" },
                     new CuiRectTransformComponent { AnchorMin = "0.3714287 0.2285714", AnchorMax = "0.5797616 0.7523809" }
                 }
             });
@@ -62,6 +110,7 @@ namespace Oxide.Plugins
 
         private void CreateTerminalUI(BasePlayer player)
         {
+            Puts("Created Terminal UI");
             var uiElements = new CuiElementContainer();
 
             var mainPanel = uiElements.Add(new CuiPanel
@@ -129,25 +178,34 @@ namespace Oxide.Plugins
             CuiHelper.AddUi(player, uiElements);
         }
 
+
+        //chat commands
         [ChatCommand("laptop")]
         private void OpenLaptop(BasePlayer player)
         {
-            terminalUsedCommands = new string[numberOfLines];
+            clearLastCommands();
             CreateTerminalUI(player);
         }
 
-        /*[ChatCommand("laptop.close")]
-        private void CloseLaptop(BasePlayer player)
+        [ChatCommand("scanner")]
+        private void OpenScanner(BasePlayer player)
         {
-            CuiHelper.DestroyUi(player, "TerminalPanel");
+            CreateScannerUI(player);
+        }
 
-        }*/
 
+        [ChatCommand("test")]
+        private void test(BasePlayer player)
+        {
+            player.ChatMessage("Hi");
+        }
+
+        //console commands
         [ConsoleCommand("terminal.enter")]
         private void TerminalEnter(ConsoleSystem.Arg arg)
         {
             string userInput = arg.GetString(0, "");
-            updateLastCommand(terminalPath +  userInput);            
+            updateLastCommand(terminalPath + userInput);
             CuiHelper.DestroyUi(arg.Player(), "TerminalPanel");
             runTerminalCommand(userInput);
             CreateTerminalUI(arg.Player());
@@ -158,15 +216,14 @@ namespace Oxide.Plugins
         private void ScannerOpen(ConsoleSystem.Arg arg)
         {
             updateLastCommand("Now opening Scanner");
-            Thread.Sleep(3000);
+            timer.Once(3f, () =>
+            {
+
+            });
             CreateScannerUI(arg.Player());
         }
 
-        [ChatCommand("test")]
-        private void test(BasePlayer player)
-        {
-            player.ChatMessage("Hi");
-        }
+
 
     }
 }
