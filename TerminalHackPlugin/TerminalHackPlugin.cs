@@ -1,14 +1,14 @@
-﻿using Oxide.Core.Plugins;
+﻿using ConVar;
+using Oxide.Core.Plugins;
 using Oxide.Game.Rust.Cui;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Security.Policy;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
 using UnityEngine;
 using WebSocketSharp;
+using static ConsoleSystem;
 
 namespace Oxide.Plugins
 {
@@ -21,22 +21,31 @@ namespace Oxide.Plugins
         private static int numberOfLines = 14;
         private string[] terminalUsedCommands = new string[numberOfLines];
         private string terminalPath = @"C:\User\Brinda>";
+        Dictionary<string, string> imageUrlMap = new Dictionary<string, string>();
 
-        private const string imagePath = "https://cdn.discordapp.com/attachments/1268169780024840202/1278667833131270255/Group_3_1.png";
 
-        void Init()
+
+        private void OnServerInitialized()
         {
+            imageUrlMap.Add("scanner_gg", "https://i.imgur.com/U3z9e9S.png");
+
             if (ImageLibrary == null)
             {
                 PrintError("ImageLibrary plugin is not loaded. Please install ImageLibrary plugin.");
                 return;
             }
 
-            ImageLibrary.AddImage(imagePath, "scannerUi");
+            foreach (var pair in imageUrlMap)
+            {
+                ImageLibrary.Call("AddImage", pair.Value, pair.Key);
+            }
         }
 
+        private string getImage(string name)
+        {
+            return (string)ImageLibrary.Call("GetImage", imageUrlMap[name], (ulong) 0);
+        }
 
-        //helpers
         private void clearLastCommands()
         {
             terminalUsedCommands = new string[numberOfLines];
@@ -50,7 +59,7 @@ namespace Oxide.Plugins
             }
         }
 
-        void runTerminalCommand(string command)
+        void runTerminalCommand(string command, BasePlayer player)
         {
             switch (command)
             {
@@ -59,7 +68,7 @@ namespace Oxide.Plugins
                     break;
 
                 case "run":
-                    ConsoleSystem.Run(ConsoleSystem.Option.Server.Quiet(), "scanner.open");
+                    ScannerOpen(player);
                     break;
 
                 case "clear":
@@ -72,23 +81,59 @@ namespace Oxide.Plugins
             }
         }
 
+
+        void StartScanning(BasePlayer player)
+        {
+            Ray ray = new Ray(player.eyes.position, player.eyes.HeadForward());
+            RaycastHit hit;
+
+            if (UnityEngine.Physics.Raycast(ray, out hit, 5f)) 
+            {
+                BaseEntity entity = hit.GetEntity();
+                if (entity != null && entity.ShortPrefabName == "lock.code")
+                {
+                    CodeLock codeLock = entity.GetComponent<CodeLock>();
+                    if (codeLock != null)
+                    {
+                        codeLock.SetFlag(BaseEntity.Flags.Locked, false);
+                        codeLock.SendNetworkUpdateImmediate();
+                    }
+                }
+            }
+        }
+
+        //hooks
+        void OnPlayerInput(BasePlayer player, InputState input)
+        {
+            if (input.WasJustPressed(BUTTON.JUMP))
+            {
+                CloseScanner(player);
+            }
+
+            if (input.WasJustPressed(BUTTON.DUCK))
+            {
+                player.ConsoleMessage("Scanned");
+                StartScanning(player);
+            }
+        }
+
         //UI helpers
         private void CreateScannerUI(BasePlayer player)
         {
-            Puts("Created Scanner");
+             Puts("Created Scanner!");
             var uiElements = new CuiElementContainer();
-            string imageId = ImageLibrary.GetImage("scannerUi");
+            string imageId = (string)ImageLibrary.Call("GetImage", "scanner2");
 
             var mainPanel = uiElements.Add(new CuiPanel
             {
                 Image = { Color = "0 0 0 0" },
-                RectTransform = { AnchorMin = "0.3178574 0.3257154", AnchorMax = "0.6714277 0.7152363" },
+                RectTransform = { AnchorMin = "0 0", AnchorMax = "1 1" },
                 CursorEnabled = true
-            }, "Overlay", "ScannerPlan");
+            }, "Overlay", "ScannerPanel");
 
             uiElements.Add(new CuiButton
             {
-                Button = { Close = mainPanel, Color = "0 0 0 0" },
+                Button = { Command = "scanner.close"/*Close = mainPanel*/, Color = "0 0 0 1" },
                 Text = { Text = "X", FontSize = 14 },
                 RectTransform = { AnchorMin = "0.915827 0.9022043", AnchorMax = "0.9798004 0.9798004" }
 
@@ -96,12 +141,11 @@ namespace Oxide.Plugins
 
             uiElements.Add(new CuiElement
             {
-                Name = "Scanner",
                 Parent = mainPanel,
                 Components =
                 {
-                    new CuiRawImageComponent { Png = imageId, Sprite = "assets/content/ui/uibackgroundblur.mat" },
-                    new CuiRectTransformComponent { AnchorMin = "0.3714287 0.2285714", AnchorMax = "0.5797616 0.7523809" }
+                    new CuiRawImageComponent {/* Png = getImage("scanner_gg")*/ Url = imageUrlMap["scanner_gg"] },
+                    new CuiRectTransformComponent { AnchorMin = $"0.4226196 0.16857", AnchorMax = $"0.5791665 0.6447623"  }
                 }
             });
 
@@ -169,7 +213,7 @@ namespace Oxide.Plugins
 
             uiElements.Add(new CuiButton
             {
-                Button = { Close = mainPanel, Color = "1 1 1 1" },
+                Button = { Close = mainPanel, Color = "1 1 1 1"},
                 Text = { Text = "X", FontSize = 14 },
                 RectTransform = { AnchorMin = "0.915827 0.9022043", AnchorMax = "0.9798004 0.9798004" }
 
@@ -191,6 +235,21 @@ namespace Oxide.Plugins
         private void OpenScanner(BasePlayer player)
         {
             CreateScannerUI(player);
+            timer.Every(0.5f, () =>
+            {
+
+            });
+        }
+        
+        private void CloseScanner(BasePlayer player)
+        {
+            CuiHelper.DestroyUi(player, "ScannerPanel");
+        }
+        
+        [ConsoleCommand("scanner.close")]
+        private void CloseScannerConsole(ConsoleSystem.Arg arg)  
+        {
+            CloseScanner(arg.Player());
         }
 
 
@@ -207,21 +266,29 @@ namespace Oxide.Plugins
             string userInput = arg.GetString(0, "");
             updateLastCommand(terminalPath + userInput);
             CuiHelper.DestroyUi(arg.Player(), "TerminalPanel");
-            runTerminalCommand(userInput);
+            runTerminalCommand(userInput, arg.Player());
             CreateTerminalUI(arg.Player());
         }
 
 
-        [ConsoleCommand("scanner.open")]
-        private void ScannerOpen(ConsoleSystem.Arg arg)
+        private void ScannerOpen(BasePlayer player)
         {
             updateLastCommand("Now opening Scanner");
-            timer.Once(3f, () =>
-            {
 
-            });
-            CreateScannerUI(arg.Player());
+            if (player == null)
+            {
+                Puts("Player not found");
+            }
+            Puts(player.displayName);
+            CreateScannerUI(player);
         }
+
+        [ConsoleCommand("scanner.close")]
+        private void ScannerClose(ConsoleSystem.Arg arg)
+        {
+            CuiHelper.DestroyUi(arg.Player(), "ScannerPanel");
+        }
+
 
 
 
